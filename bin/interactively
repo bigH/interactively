@@ -1,0 +1,123 @@
+#!/usr/bin/env bash
+
+COMMAND_NAME=""
+COMMAND=""
+
+RED="$(tput setaf 1)"
+GREEN="$(tput setaf 2)"
+YELLOW="$(tput setaf 3)"
+MAGENTA="$(tput setaf 5)"
+CYAN="$(tput setaf 6)"
+BOLD="$(tput bold)"
+NORMAL="$(tput sgr0)"
+
+if [ -z "$INTERACTIVELY_NO_HEADER" ]; then
+  HEADER='
+  '"${CYAN}${BOLD}Esc${NORMAL}   - ${MAGENTA}end session and print query${NORMAL}"'
+  '"${CYAN}${BOLD}Enter${NORMAL} - ${MAGENTA}save current query${NORMAL}"'
+  '"${CYAN}${BOLD}Tab${NORMAL}   - ${MAGENTA}load selected query${NORMAL}"'
+
+  '
+fi
+
+interactively_usage() {
+  echo "${BOLD}Interactively try out expressions in commands.${NORMAL}"
+  echo ""
+  echo "  ${GREEN}interactively ${CYAN}--name ${MAGENTA}awk${NORMAL} ${YELLOW}'cat foo.txt | awk {q}'${NORMAL}"
+  echo ""
+  echo "    ${CYAN}-h --help${NORMAL}"
+  echo "        this help text"
+  echo ""
+  echo "    ${CYAN}--name ${MAGENTA}[command-name]${NORMAL} | ${CYAN}-n ${MAGENTA}[command-name]${NORMAL}"
+  echo "        used to differentiate the history of different commands"
+  echo ""
+  echo "The command name is not required. If not provided, the first word in"
+  echo "the command is used. In the example above, that is ${GREEN}cat${NORMAL}."
+  echo ""
+  echo "${BOLD}Examples${NORMAL}:"
+  echo ""
+  echo "  ${GREEN}interactively${NORMAL} ${YELLOW}'grep {q} file.txt'${NORMAL}"
+  echo "  ${GREEN}interactively${NORMAL} ${YELLOW}'sed -e {q} file.txt'${NORMAL}"
+  echo "  ${GREEN}interactively${NORMAL} ${YELLOW}'jq -C {q} file.json'${NORMAL}"
+  echo "  ${GREEN}interactively${NORMAL} ${CYAN}--name ${MAGENTA}jq ${YELLOW}'kubectl .... -o json | jq -C {q}'${NORMAL}"
+}
+
+# exit with an error message
+error_exit() {
+  echo "[${RED}${BOLD}ERROR${NORMAL}] $1"
+  echo
+  interactively_usage
+  exit 1
+}
+
+# read content from the command-line args
+configure_session() {
+  while [ "$1" != "" ]; do
+    case $1 in
+      -h | --help)
+        interactively_usage
+        exit 0
+        ;;
+      -n | --name)
+        shift
+        COMMAND_NAME="$1"
+        ;;
+      --name=* | -n=*)
+        COMMAND_NAME="${1#*=}"
+        ;;
+      -n*)
+        COMMAND_NAME="${1:2}"
+        ;;
+      *)
+        COMMAND="$1"
+        ;;
+    esac
+    shift
+  done
+
+  if [ -z "$COMMAND_NAME" ]; then
+    # shellcheck disable=2086
+    COMMAND_NAME="$(echo "$COMMAND" | awk '{ print $1 }')"
+  fi
+
+  if [ -n "$FZF_HISTORY_DIR" ] && [ -d "$FZF_HISTORY_DIR" ]; then
+    HISTORY_DIR="$FZF_HISTORY_DIR"
+    mkdir -p "$HISTORY_DIR"
+  else
+    HISTORY_DIR="$(cd "$TMPDIR" && pwd)"
+  fi
+  HISTORY_FILE="$HISTORY_DIR/interactively_$COMMAND_NAME"
+  touch "$HISTORY_FILE"
+}
+
+validate_configs() {
+  if [ -z "$COMMAND" ]; then
+    error_exit "you didn't provide a command to run"
+  fi
+
+  if [ -z "$COMMAND_NAME" ]; then
+    error_exit "command name was not provided or couldn't be calculated"
+  fi
+
+  if [ ! -r "$HISTORY_FILE" ] || [ ! -w "$HISTORY_FILE" ] || [ ! -f "$HISTORY_FILE" ]; then
+    error_exit "history file issues: $HISTORY_FILE"
+  fi
+}
+
+configure_session "$@"
+validate_configs
+
+if [ -f "$HISTORY_FILE" ] && [ -r "$HISTORY_FILE" ]; then
+  tac "$HISTORY_FILE" | \
+    fzf --phony \
+        --history "$HISTORY_FILE" \
+        --header "$HEADER" \
+        --no-height \
+        --preview "$COMMAND" \
+        --bind "enter:execute-silent(echo {q} >> $HISTORY_FILE)+reload(tac $HISTORY_FILE)" \
+        --bind "tab:replace-query" \
+        --bind "esc:print-query"
+else
+  # shellcheck disable=2016
+  error_exit 'please set `$FZF_HISTORY_DIR` or `$TMPDIR`'
+fi
