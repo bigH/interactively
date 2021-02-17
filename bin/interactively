@@ -20,6 +20,60 @@ if [ -z "$INTERACTIVELY_NO_HEADER" ]; then
   '
 fi
 
+#!/usr/bin/env bash
+
+# -- Default configurations: --
+
+if [ -z "$INTERACTIVELY_SIZER_VERTICAL_THRESHOLD" ]; then
+  INTERACTIVELY_SIZER_VERTICAL_THRESHOLD="3.5"
+fi
+
+if [ -z "$INTERACTIVELY_SIZER_VERTICAL_PREVIEW_LOCATION" ]; then
+  INTERACTIVELY_SIZER_VERTICAL_PREVIEW_LOCATION="bottom"
+fi
+
+if [ -z "$INTERACTIVELY_SIZER_HORIZONTAL_PREVIEW_LOCATION" ]; then
+  INTERACTIVELY_SIZER_HORIZONTAL_PREVIEW_LOCATION="right"
+fi
+
+if [ -z "$INTERACTIVELY_SIZER_HORIZONTAL_PREVIEW_PERCENT_CALCULATION" ]; then
+  INTERACTIVELY_SIZER_HORIZONTAL_PREVIEW_PERCENT_CALCULATION='max(60, min(80, 100 - ((5000 + (11 * __WIDTH__))  / __WIDTH__)))'
+fi
+
+if [ -z "$INTERACTIVELY_SIZER_VERTICAL_PREVIEW_PERCENT_CALCULATION" ]; then
+  INTERACTIVELY_SIZER_VERTICAL_PREVIEW_PERCENT_CALCULATION='max(60, min(90, 100 - ((900 + (11 * __HEIGHT__)) / __HEIGHT__)))'
+fi
+
+# -- Sizer "programs": --
+
+INTERACTIVELY_SIZER_BC_STL='
+define min(a, b) { if (a < b) return a else return b }
+define max(a, b) { if (a > b) return a else return b }
+'
+
+interactively_run_bc_program() {
+  WIDTH="$(tput cols)"
+  HEIGHT="$(tput lines)"
+
+  WIDTH_SUBSTITUTED="${1//__WIDTH__/$WIDTH}"
+  echo "${INTERACTIVELY_SIZER_BC_STL} ${INTERACTIVELY_SIZER_BC_LIB} ${WIDTH_SUBSTITUTED//__HEIGHT__/$HEIGHT}" | bc -l
+}
+
+interactively_preview_window_settings() {
+  IS_VERTICAL="$(interactively_run_bc_program "__WIDTH__ / __HEIGHT__ < $INTERACTIVELY_SIZER_VERTICAL_THRESHOLD")"
+
+  if [ "$IS_VERTICAL" = '1' ]; then
+    PREVIEW_DIRECTION="$INTERACTIVELY_SIZER_VERTICAL_PREVIEW_LOCATION"
+    PREVIEW_SIZE="$(interactively_run_bc_program "$INTERACTIVELY_SIZER_VERTICAL_PREVIEW_PERCENT_CALCULATION")"
+  else
+    PREVIEW_DIRECTION="$INTERACTIVELY_SIZER_HORIZONTAL_PREVIEW_LOCATION"
+    PREVIEW_SIZE="$(interactively_run_bc_program "$INTERACTIVELY_SIZER_HORIZONTAL_PREVIEW_PERCENT_CALCULATION")"
+  fi
+
+  # NB: round the `bc -l` result
+  echo "--preview-window=$PREVIEW_DIRECTION:${PREVIEW_SIZE%%.*}%"
+}
+
 interactively_usage() {
   echo "${BOLD}Interactively try out expressions in commands.${NORMAL}"
   echo ""
@@ -110,6 +164,7 @@ validate_configs
 if [ -f "$HISTORY_FILE" ] && [ -r "$HISTORY_FILE" ]; then
   tac "$HISTORY_FILE" | \
     fzf --phony \
+        "$(interactively_preview_window_settings)" \
         --history "$HISTORY_FILE" \
         --header "$HEADER" \
         --no-height \
