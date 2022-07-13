@@ -24,24 +24,32 @@ fi
 
 interactively_usage() {
   echo "${BOLD}Interactively try out expressions in commands.${NORMAL}"
-  echo ""
-  echo "  ${GREEN}interactively ${CYAN}--name ${MAGENTA}awk${NORMAL} ${YELLOW}'cat foo.txt | awk {q}'${NORMAL}"
-  echo ""
+  echo
+  echo "  ${GREEN}interactively ${CYAN}--name ${MAGENTA}awk${NORMAL} ${YELLOW}'cat foo.txt | awk {}'${NORMAL}"
+  echo
   echo "    ${CYAN}-h --help${NORMAL}"
   echo "        this help text"
-  echo ""
+  echo
   echo "    ${CYAN}--name ${MAGENTA}[command-name]${NORMAL} | ${CYAN}-n ${MAGENTA}[command-name]${NORMAL}"
   echo "        used to differentiate the history of different commands"
-  echo ""
+  echo
   echo "The command name is not required. If not provided, the first word in"
   echo "the command is used. In the example above, that is ${GREEN}cat${NORMAL}."
-  echo ""
+  echo
   echo "${BOLD}Examples${NORMAL}:"
-  echo ""
-  echo "  ${GREEN}interactively${NORMAL} ${YELLOW}'grep {q} file.txt'${NORMAL}"
-  echo "  ${GREEN}interactively${NORMAL} ${YELLOW}'sed -e {q} file.txt'${NORMAL}"
-  echo "  ${GREEN}interactively${NORMAL} ${YELLOW}'jq -C {q} file.json'${NORMAL}"
-  echo "  ${GREEN}interactively${NORMAL} ${CYAN}--name ${MAGENTA}jq ${YELLOW}'kubectl .... -o json | jq -C {q}'${NORMAL}"
+  echo
+  echo "  ${GREEN}interactively${NORMAL} ${YELLOW}'grep {} file.txt'${NORMAL}"
+  echo "  ${GREEN}interactively${NORMAL} ${YELLOW}'sed -e {} file.txt'${NORMAL}"
+  echo "  ${GREEN}interactively${NORMAL} ${YELLOW}'jq -C {} file.json'${NORMAL}"
+  echo "  ${GREEN}interactively${NORMAL} ${CYAN}--name ${MAGENTA}jq ${YELLOW}'kubectl .... -o json | jq -C {}'${NORMAL}"
+  echo
+  echo "${BOLD}Advanced${NORMAL}:"
+  echo
+  echo "Depending on which placeholder you use, you can choose how this program will work in preview."
+  echo
+  echo "- ${YELLOW}'{q}'${NORMAL} use query for preview"
+  echo "- ${YELLOW}'{..}'${NORMAL} use selection for preview"
+  echo "- ${YELLOW}'{}'${NORMAL} use query only when first line is selected, otherwise use selection"
 }
 
 # exit with an error message
@@ -71,7 +79,10 @@ configure_session() {
         COMMAND_NAME="${1:2}"
         ;;
       *)
-        COMMAND="$1"
+        # shellcheck disable=2001
+        COMMAND="$(echo "$1" | sed 's/{}/{q}/g')"
+        # shellcheck disable=2001
+        COMMAND_WITH_SELECTION="$(echo "$1" | sed 's/{}/{..}/g')"
         ;;
     esac
     shift
@@ -110,15 +121,15 @@ configure_session "$@"
 validate_configs
 
 if [ -f "$HISTORY_FILE" ] && [ -r "$HISTORY_FILE" ]; then
-  tac "$HISTORY_FILE" | \
+  (echo ; tac "$HISTORY_FILE") | \
     fzf --phony \
         --history "$HISTORY_FILE" \
         --header "$HEADER" \
         --no-height \
-        --preview "$COMMAND" \
-        --bind "enter:execute-silent(echo {q} >> $HISTORY_FILE)+reload(tac $HISTORY_FILE)" \
+        --preview "[ -z {..} ] && ($COMMAND ; true) || $COMMAND_WITH_SELECTION" \
+        --bind "enter:execute-silent(echo {q} >> $HISTORY_FILE)+reload(echo ; tac $HISTORY_FILE)+first" \
         --bind "tab:replace-query" \
-        --bind "esc:print-query"
+        --print-query
 else
   # shellcheck disable=2016
   error_exit 'please set `$FZF_HISTORY_DIR` or `$TMPDIR`'
