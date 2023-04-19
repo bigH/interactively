@@ -128,8 +128,8 @@ if [ -f "$HISTORY_FILE" ] && [ -r "$HISTORY_FILE" ]; then
         --no-height \
         --preview "[ -z {..} ] && ($COMMAND ; true) || $COMMAND_WITH_SELECTION" \
         --bind "enter:execute-silent(echo {q} >> $HISTORY_FILE)+reload(echo ; tac $HISTORY_FILE)+first" \
-        --bind "tab:replace-query+first" \
-        --print-query
+        --bind 'tab:replace-query+first' \
+        --bind 'esc:print-query'
 else
   # shellcheck disable=2016
   error_exit 'please set `$FZF_HISTORY_DIR` or `$TMPDIR`'
