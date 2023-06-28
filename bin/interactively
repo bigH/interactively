@@ -56,6 +56,13 @@ interactively_usage() {
 error_exit() {
   echo "[${RED}${BOLD}ERROR${NORMAL}] $1"
   echo
+  exit 1
+}
+
+# exit with an error message
+usage_exit() {
+  echo "[${RED}${BOLD}ERROR${NORMAL}] $1"
+  echo
   interactively_usage
   exit 1
 }
@@ -103,20 +110,35 @@ configure_session() {
   touch "$HISTORY_FILE"
 }
 
-validate_configs() {
-  if [ -z "$COMMAND" ]; then
-    error_exit "you didn't provide a command to run"
+validate_system() {
+  if ! type fzf >/dev/null 2>&1; then
+    # shellcheck disable=2016
+    error_exit '`fzf` not found; it is required for `git fuzzy` to work.'
   fi
 
-  if [ -z "$COMMAND_NAME" ]; then
-    error_exit "command name was not provided or couldn't be calculated"
-  fi
-
-  if [ ! -r "$HISTORY_FILE" ] || [ ! -w "$HISTORY_FILE" ] || [ ! -f "$HISTORY_FILE" ]; then
-    error_exit "history file issues: $HISTORY_FILE"
+  FZF_VERSION="$(fzf --version)"
+  MIN_FZF_VERSION="0.27.0"
+  if [ "$FZF_VERSION" = "$(echo -e "$FZF_VERSION\n$MIN_FZF_VERSION" | sort -V | head -n1)" ]; then
+    # shellcheck disable=2016
+    error_exit '`fzf` is too old and may not work properly; please install 0.27.0 or newer'
   fi
 }
 
+validate_configs() {
+  if [ -z "$COMMAND" ]; then
+    usage_exit "you didn't provide a command to run"
+  fi
+
+  if [ -z "$COMMAND_NAME" ]; then
+    usage_exit "command name was not provided or couldn't be calculated"
+  fi
+
+  if [ ! -r "$HISTORY_FILE" ] || [ ! -w "$HISTORY_FILE" ] || [ ! -f "$HISTORY_FILE" ]; then
+    usage_exit "history file issues: $HISTORY_FILE"
+  fi
+}
+
+validate_system
 configure_session "$@"
 validate_configs
 
